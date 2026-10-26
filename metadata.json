@@ -1,0 +1,6 @@
+{
+  "name": "إدارة الكروت - Cards Manager",
+  "description": "تطبيق متكامل لإدارة وصرف كروت الشحن والبطاقات وتوزيعها وسجل العمليات والنسخ الاحتياطي",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

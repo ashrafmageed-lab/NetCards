@@ -1,11 +1,159 @@
-<div align="center">
+# تطبيق مخزن وإدارة كروت الإنترنت (Hotspot Cards Manager) - Android Native
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+تطبيق أندرويد أصيل (Native) مبني بأحدث التقنيات الرسمية (Kotlin, Jetpack Compose, Material Design 3, Room Persistence) لإدارة وشحن وتوزيع كروت شبكات الإنترنت (Hotspot)، يعمل دون اتصال بالإنترنت (100% Offline) وبدون أي إعلانات أو أدوات تتبع.
 
-  <h1>Built with AI Studio</h2>
+---
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## 1. البنية المعمارية (Architecture)
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+تم بناء التطبيق وفق نمط **Clean Architecture + MVVM** مع فصل كامل للمسؤوليات:
 
-</div>
+```
+app/src/main/java/com/example/
+├── CardsApplication.kt               // @HiltAndroidApp تهيئة تطبيق هيلت
+├── MainActivity.kt                   // @AndroidEntryPoint النشاط الرئيسي مع Edge-to-Edge
+├── cardsmanager/
+│   ├── di/
+│   │   ├── DatabaseModule.kt         // Hilt Module لقاعدة البيانات والـ DAO والـ Scope
+│   │   └── RepositoryModule.kt       // Hilt Module للـ Repositories
+│   ├── data/
+│   │   ├── Entities.kt               // جداول Room (CategoryEntity, CardEntity) مع الفهرس الفريد المركب
+│   │   ├── CardsDao.kt               // استعلامات Room والمعاملات الذرية (@Transaction)
+│   │   ├── CardsDatabase.kt          // قاعدة بيانات Room مع التهيئة الافتراضية
+│   │   ├── CardsRepository.kt        // وسيط الوصول للبيانات وتدفقات Flow
+│   │   ├── SettingsRepository.kt     // إدارة إعدادات القالب وحد التنبيه
+│   │   ├── TextFiles.kt              // قراءة الملفات عبر Storage Access Framework (SAF)
+│   │   └── BackupManager.kt          // النسخ الاحتياطي والاستعادة بتنسيق JSON
+│   ├── domain/
+│   │   ├── CardTextParser.kt         // محلل نصوص الكروت مع كشف الفواصل وإزالة BOM
+│   │   └── MessageTemplate.kt        // محرك استبدال القوالب وتوليد الرسائل الفردية والمجمعة
+│   ├── share/
+│   │   └── WhatsAppShareHelper.kt    // مشاركة واتساب وواتساب أعمال وقائمة المشاركة العامة
+│   └── ui/
+│       ├── Strings.kt                // نصوص الواجهة العربية
+│       ├── UiCommon.kt               // مكونات العرض (بطاقة الكارت، تنبيه الرصيد، حوارات التأكيد)
+│       ├── Components.kt             // حوارات الشحن، السحب، التفريغ الآمن، وتقارير الاستيراد
+│       ├── HomeViewModel.kt & HomeScreen.kt         // @HiltViewModel شاشة العدادات والسحب
+│       ├── CategoriesViewModel.kt & CategoriesScreen.kt // @HiltViewModel شاشة إدارة الفئات
+│       ├── HistoryViewModel.kt & HistoryScreen.kt   // @HiltViewModel سجل الصرف والبحث
+│       ├── SettingsViewModel.kt & SettingsScreen.kt // @HiltViewModel محرر القوالب والنسخ الاحتياطي
+│       └── CardsApp.kt               // شريط التنقل مع hiltViewModel()
+```
+
+---
+
+## 2. المميزات الرئيسية المنفذة
+
+1. **فئات ديناميكية مع 4 فئات افتراضية:**
+   - الدور الثالث - 5 جيجا
+   - الدور الثالث - 10 جيجا
+   - الدور الخامس - 5 جيجا
+   - الدور الخامس - 10 جيجا
+   - إمكانية إضافة، تعديل اسم ولون، وحذف أي فئة (مع تحذير يذكر عدد الكروت بدقة).
+2. **منع التكرار على مستوى قاعدة البيانات:**
+   - فهرس فريد مركب: `UNIQUE INDEX (categoryId, name COLLATE NOCASE)` بعد `trim` لمنع إدخال نفس اسم المستخدم داخل نفس الفئة.
+3. **سحب ذري ومنع ضياع الكروت:**
+   - السحب يتم في `@Transaction` واحدة؛ يتحول الكارت إلى `ISSUED` دون أن يُحذف من المخزن.
+   - خيار "تراجع Undo" فوري لإرجاع الكارت كمتاح.
+   - ميزة "سحب متعدد" لإخراج N كروت دفعة واحدة برسالة مجمعة ومرقمة.
+4. **استيراد ملفات نصية ولصق يدوي:**
+   - اختيار الملفات عبر **Storage Access Framework (SAF)** دون الحاجة لأي إذن تخزين.
+   - كشف تلقائي للفواصل (`,`, `;`, `\t`)، إزالة BOM، وتخطي الأسطر الفارغة وسطور العناوين.
+   - تقرير استيراد تفصيلي يوضح (المستورد | المكرر | غير الصالح مع رقم السطر والسبب).
+   - وضعان: الإضافة على الموجود (الافتراضي) أو الاستبدال بالكامل (بتأكيد).
+5. **مشاركة واتساب احترافية:**
+   - استهداف `com.whatsapp` ثم `com.whatsapp.w4b` (Business) ثم قائمة المشاركة العامة (Chooser).
+   - قالب رسالة قابل للتخصيص الكامل من الإعدادات مع وسوم ديناميكية: `{name}`, `{pass}`, `{plan}`, `{category}`.
+6. **تفريغ الفئة الآمن:**
+   - خيار صريح يعرض زر **"تصدير نصي أولاً"** بصيغة `user,pass,plan` قبل التفريغ لضمان عدم ضياع البيانات.
+7. **تذكرة الكارت كصورة عالية الدقة (Voucher Ticket Image):**
+   - توليد بطاقة كارت رسومية أنيقة وعالية الدقة (PNG) تحمل شعار التذكرة، الفئة، اسم المستخدم وكلمة المرور بخط Monospace مميز، مع كود باركود، ومشاركتها مباشرة عبر واتساب بنقرة واحدة عبر Android `FileProvider`.
+8. **التغذية اللمسية التفاعلية (Haptic Feedback):**
+   - استجابة اهتزازية خفيفة ودقيقة عند سحب الكارت، التراجع، نسخ الباسورد، وأزرار لوحة المفاتيح.
+9. **قفل الأمان برمز PIN (PIN / Biometric Lock):**
+   - لوحة مفاتيح أمان لحماية التطبيق وعمليات تفريغ المخزن والبيانات برمز PIN مخصص مع حركات اهتزازية عند الخطأ.
+10. **سلة المهملات المؤقتة (Trash / Soft Delete):**
+    - حماية الكروت المحذوفة أو المفرغة بنقلها إلى سلة مهملات مؤقتة بدلاً من المسح النهائي، مع إمكانية استعادة الكروت الفردية أو استعادة الكل بضغطة زر.
+11. **إضافة فئات غير محدودة وسحب متعدد مخصص:**
+    - إضافة فئات جديدة مخصصة في أي وقت باسم ولون مميز.
+    - إمكانية تحديد أي عدد مخصص N من الكروت لسحبها دفعة واحدة برسالة واحدة مجمعة.
+12. **الخصوصية والأمان التام:**
+    - **بدون إذن INTERNET نهائياً** في الـ Manifest (أوفلاين 100%).
+    - لا توجد أي مكتبات إعلانات أو تتبع خارجي.
+    - `allowBackup="false"` لحماية كلمات المرور.
+    - خط **Cairo** مدمج محلياً (`res/font/cairo.ttf`).
+
+---
+
+## 3. طريقة البناء والتشغيل
+
+- **بناء التطبيق للمعاينة (Debug APK):**
+  ```bash
+  gradle assembleDebug
+  ```
+- **تشغيل حزمة الاختبارات الآلية (Unit + Robolectric):**
+  ```bash
+  gradle :app:testDebugUnitTest
+  ```
+- **بناء حزمة الإنتاج (Release APK / Bundle):**
+  ```bash
+  gradle assembleRelease
+  ```
+
+### كيفية التوقيع وتوليد Keystore جديد:
+لحماية التطبيق وعدم كشف مفتاح التوقيع:
+1. أنشئ keystore خاص بك عبر موجه الأوامر:
+   ```bash
+   keytool -genkey -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-alias
+   ```
+2. عيّن المتغيرات البيئية عند البناء دون وضع كلمات المرور في المستودع:
+   ```bash
+   export KEYSTORE_PATH="/path/to/my-release-key.jks"
+   export STORE_PASSWORD="your-password"
+   export KEY_PASSWORD="your-password"
+   gradle assembleRelease
+   ```
+*ملاحظة هامة:* إذا كان التطبيق منشوراً سابقاً على Google Play عبر مفتاح قديم، فإن تغيير الـ Keystore سيتطلب الاستعانة بـ Google Play App Signing لإعادة تعيين مفتاح الرفع (Upload Key Reset).
+
+---
+
+## 4. تقرير المراجعة الذاتية الرباعية (Self-Review Report)
+
+### الجولة 1 — الصحة البرمجية (Correctness)
+- **ما تم فحصه:** مسار الاستيراد، منع التكرار، السحب الذري، والـ Cascade عند حذف فئة.
+- **النتائج والحلول:**
+  - تم التحقق من عمل الفهرس الفريد المركب `(categoryId, name COLLATE NOCASE)` واختباره بنجاح في `CardsDaoRobolectricTest`، حيث يتخطى التكرار تلقائياً دون تعطيل باقي الدفعة.
+  - تم التأكد من ذرية السحب في `CardsDao.dispenseNextCard` لمنع خروج كارتين بنقرة مزدوجة سريعة.
+
+### الجولة 2 — الأداء والذاكرة (Performance)
+- **ما تم فحصه:** العمليات على قاعدة البيانات والـ UI Thread أثناء الاستيراد.
+- **النتائج والحلول:**
+  - كل عمليات قراءة الملف واستيراد الكروت تجري داخل `Dispatchers.IO` وفي Transaction واحدة مجمعة عبر `insertCardIgnore` لتجنب تجميد الواجهة.
+  - تم استخدام `LazyColumn` مع مفاتيح فريدة في عناصر القوائم لتفادي الـ Recomposition غير الضروري.
+
+### الجولة 3 — المتانة والأمان (Robustness & Security)
+- **ما تم فحصه:** فحص الـ Manifest المدمج، التحقق من أذونات النظام، وحماية كلمات المرور.
+- **النتائج والحلول:**
+  - تم فحص `AndroidManifest.xml` والتأكد من خلوه بنسبة 100% من إذن `android.permission.INTERNET`.
+  - تم ضبط `allowBackup="false"` وتضمين خط Cairo محلياً في مجلد `res/font`.
+  - تم إدراج `<queries>` لتطبيقات WhatsApp و WhatsApp Business لتوافق تام مع أندرويد 11 فما فوق.
+
+### الجولة 4 — الجودة وتجربة المستخدم (Quality & UX)
+- **ما تم فحصه:** دعم RTL، وضوح الخطوط، شارات نفاذ الرصيد، وسهولة النسخ.
+- **النتائج والحلول:**
+  - تم تطبيق خط Monospace لكلمات المرور وأسماء المستخدمين لتمييز الرموز المتشابهة (`0/O` و `1/l/I`).
+  - إضافة شارة تنبيه ملونة عند هبوط الرصيد عن الحد الأدنى المحدد من المستخدم.
+
+---
+
+## 5. قرارات اتُخذت وأفكار للمرحلة الثانية
+
+### قرارات اتخذت بالنيابة عن العميل:
+1. **حقن الاعتماديات اليدوي:** تم استخدام Manual Constructor Injection عبر حاوية `CardsApplication` لتسريع البناء وتقليل الحجم وتفادي تعقيدات Hilt KSP.
+2. **منع التكرار غير الحساس للأحرف (NOCASE):** تم اعتماده لأن خوادم الهوت سبوت (مثل MikroTik) غالباً ما تعامل `User01` و `user01` كاسم واحد.
+3. **الحذف التعاقبي المحمي (Cascade with UI Guard):** تم تفعيل `ON DELETE CASCADE` في قاعدة البيانات مع منع الحذف في الواجهة حتى يؤكد المستخدم صراحةً بعد رؤية عدد الكروت المتأثرة.
+
+### أفكار مقترحة للمرحلة الثانية (Stage 2):
+1. **الربط المباشر مع راوتر مايكروتك (MikroTik RouterOS API):** توليد وسحب الكروت مباشرة من الراوتر عبر الشبكة المحلية (Local LAN Socket).
+2. **طباعة الإيصالات الحرارية (Bluetooth Thermal Printing):** دعم طباعة الكارت فورياً على طابعات البلوتوث المحمولة مع باركود / QR Code.
+3. **صلاحيات وحسابات المستخدمين:** وضع كلمة مرور أو بصمة (Biometrics) لحماية المخزن وتفريغ الكروت.
